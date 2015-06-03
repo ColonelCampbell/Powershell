@@ -1,115 +1,81 @@
-﻿# User Creation Automation Script: One-off
-# Created By: Perry Beagle
-# Date: 10/14/14
+# AD User Creation Tool - User_Creation.ps1
+# Date: 6/3/15
 
 Import-Module ActiveDirectory
 
-$IntroMsg       = @(Write-Host "
+$userous  = Get-ADOrganizationalUnit -Filter * -SearchBase 'OU=Users,OU=SX_PEOPLE,DC=SOUNDX,DC=LOCAL' | Select-Object -Property Name,Distinguishedname 
 
-ATTENTION: 
-This script must be run as by an account with 'Domain Admin' access-rights.
-Do not use spaces when answering these prompts or the script will fail.
+$sript:department = 0 
 
-")
-
-$IntroMsg
-
-# Below is the code to run a windowed selection of the OU's available to move AD-Objects.
-# That's right, ~60 lines of code for a popup menu!
-
-Function Select_OU {
-
-    [void] [System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms")
-    [void] [System.Reflection.Assembly]::LoadWithPartialName("System.Drawing") 
- 
-    $objForm = New-Object System.Windows.Forms.Form 
-    $objForm.Text = "Select a Computer"
-    $objForm.Size = New-Object System.Drawing.Size(300,200) 
-    $objForm.StartPosition = "CenterScreen"
- 
-    $OKButton = New-Object System.Windows.Forms.Button
-    $OKButton.Location = New-Object System.Drawing.Size(75,120)
-    $OKButton.Size = New-Object System.Drawing.Size(75,23)
-    $OKButton.Text = "OK"
-    $OKButton.DialogResult = [System.Windows.Forms.DialogResult]::OK
- 
-    $objForm.Controls.Add($OKButton)
-    $objForm.AcceptButton = $OKButton
- 
-    $CancelButton = New-Object System.Windows.Forms.Button
-    $CancelButton.Location = New-Object System.Drawing.Size(150,120)
-    $CancelButton.Size = New-Object System.Drawing.Size(75,23)
-    $CancelButton.Text = "Cancel"
- 
-    $CancelButton.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
-    $objForm.Controls.Add($CancelButton)
-    $objForm.CancelButton = $CancelButton
- 
-    $objLabel = New-Object System.Windows.Forms.Label
-    $objLabel.Location = New-Object System.Drawing.Size(10,20) 
-    $objLabel.Size = New-Object System.Drawing.Size(280,20) 
-    $objLabel.Text = "Please select a department:"
-    $objForm.Controls.Add($objLabel) 
- 
-    $objListBox = New-Object System.Windows.Forms.ListBox 
-    $objListBox.Location = New-Object System.Drawing.Size(10,40) 
-    $objListBox.Size = New-Object System.Drawing.Size(260,20) 
-    $objListBox.Height = 80
- 
-    [void] $objListBox.Items.Add("Account Services")        # Put the names of the various containers here
-    [void] $objListBox.Items.Add("CEO")                     # Each line coorelates to a specific OU in the domain 
-    [void] $objListBox.Items.Add("Claims")                  # The choice made here is added to the $OU variable in the next section
-    [void] $objListBox.Items.Add("Communications")
-    [void] $objListBox.Items.Add("Customer Care")
-    [void] $objListBox.Items.Add("Data Management")
-    [void] $objListBox.Items.Add("Distribution Services")
-    [void] $objListBox.Items.Add("Executive")
-    [void] $objListBox.Items.Add("Finance")
-    [void] $objListBox.Items.Add("Human Resources")
-    [void] $objListBox.Items.Add("Industry Relations")
-    [void] $objListBox.Items.Add("IS")
-    [void] $objListBox.Items.Add("Legal")
-    [void] $objListBox.Items.Add("Licensee Relations")
-    [void] $objListBox.Items.Add("Operations")
-    [void] $objListBox.Items.Add("Repertoire")
-    [void] $objListBox.Items.Add("Service")
-
-    $objForm.Controls.Add($objListBox)  
-    $objForm.Topmost = $True
-    $result = $objForm.ShowDialog()
+Function Display-ADDepartments {
+    $i = 0
+    Write-Host Departments -ForegroundColor DarkYellow
     
-    if ($result -eq [System.Windows.Forms.DialogResult]::OK -and $objListBox.SelectedIndex -ge 0)
-    {
-        $selection = $objListBox.SelectedItem
-        Create_User
-    } 
+    ForEach ($object in $userous){
+        
+        Write-Host $i $object.name
+        $i++
+    }
+}
+
+Function Get-ADNewUserDepartment {
+ 
+    $keepselection = ''
+  
+    While ($keepselection -ne "Y"){
+
+        $script:department = Read-Host -Prompt "Please select a number that corresponds with the department the new user will be joining"
+        Write-Host "You selected the" $userous[$script:department].Name "department."
+        $verifyselection = (Read-Host -Prompt "Do you want to keep this selection? [Y/N]").ToUpper()
+        
+        If ($verifyselection -eq "N" -or $verifyselection -eq "N0") {
+            
+            $keepselection = "N"
+            Write-Host "Alright, let's try that again."
+            
+        }
+        
+        Else {
+            
+            $keepselection = "Y"
+            Write-Host "The new user will be added to the" -NoNewline
+            Write-Host " " -NoNewline
+            Write-Host $userous[$script:department].name -ForegroundColor DarkYellow -NoNewline
+            Write-Host " " -NoNewline
+            Write-Host "department organizational unit."
+            Write-Host "The user object will be placed in the following directory: " -NoNewline 
+            $userous = $userous[$script:department].Distinguishedname
+            Write-Host $userous -ForegroundColor DarkYellow 
+        }
+     }
+}    
+    
+
+Function Get-ADNewUserInformation {
+    
+    Write-Host "Now we will gather the necessary information about the user. At each prompt, enter the requested information, then press [ENTER]" -ForegroundColor Yellow
+    $Givenname    = (Read-Host -Prompt "Please enter the users First Name")
+    $Surname      = (Read-Host -Prompt "Please enter the users Last Name")
+    $Password     = (Read-Host -Prompt "Create the users password" -AsSecureString)
+    $Username     = (Read-Host -Prompt "Please enter the user's username. This is the first initial of their firstname + the lastname. ex. Bilbo Baggins = bbaggins").ToLower()
+    $Description  = (Read-Host -Prompt "Please provide a description of this user object. (Format = <Title>_<Department>)")
+    $Description  = "$Description"  
+    $FullName     = ($Givenname + ' ' + $Surname)
+    $EmailAddress = ($Username + '@soundexchange.com')
+    $Attributes   = @{'ProxyAddresses'="SMTP:$EmailAddress", "smtp:$Username@soundx.mail.onmicrosoft.com", "smtp:$Username@soundx.local"; 'targetAddress'="$Username" + "@soundx.onmicrosoft.com"; 'userPrincipalName'= "$Username" + "@soundx.local"}
+    $Path         = $userous[$script:department].Distinguishedname
+    
+    New-ADUser -Name "$FullName" -SamAccountName $Username -AccountPassword $Password -DisplayName $FullName -EmailAddress $EmailAddress -Description $Description -OtherAttributes $Attributes -Path $Path -Surname $Surname -Given $Givenname -Enabled 1
 
 }
 
-Function Create_User {
 
-    # Below is the actual script that is doing the bulk of the work
-    # All of the varibles below are placeholders for the "New-ADUSer" parameters
-    # Some ask for user input, others manipulate previous inputs to "automate" the parameters 
-
-    $Givenname      = (Read-Host -Prompt 'First Name')
-    $Surname        = (Read-Host -Prompt 'Last Name')
-    $Uname          = ((Read-Host -Prompt 'Username, eg. John Smith = jsmith').ToLower()) 
-    $Name           = ($Givenname + ' ' + $Surname)
-    $EmailAddress   = $Uname + '@soundexchange.com'
-    $Password       = (Read-Host -Prompt "Enter New User Password" -AsSecureString)
-    $Description    = (Read-Host -Prompt "Title/Department")
-    $OU             = "OU=$selection,OU=Users,OU=PEOPLE,DC=Example,DC=LOCAL"
-    $Attributes     = @{
-                    'ProxyAddresses'="SMTP:$EmailAddress", 
-                    "smtp:$Uname@example.mail.onmicrosoft.com", 
-                    "smtp:$Uname@example.LOCAL"; 
-                    'targetAddress'=$Uname + '@example.onmicrosoft.com'; 
-                    'userPrincipalName'=$Uname + '@example.com'
-                    }
-
-    New-ADUser -Name $Name -SamAccountName $Uname -AccountPassword $Password -DisplayName $Name -Description $Description -EmailAddress $EmailAddress -OtherAttributes $Attributes -Path $OU -Surname $Surname -Given $Givenname -Enabled 1
+Function New-SXADUser {
+    
+    Display-ADDepartments
+    Get-ADNewUserDepartment
+    Get-ADNewUserInformation
 
 }
 
-Select_OU
+New-ADSXUser
